@@ -5,7 +5,7 @@ Developed for personal Python Learning
 ## Running
 
 * $ pip install -r requirements.txt
-* $ python main.py
+* $ python src\main.py
 
 ## Standalone windows build
 

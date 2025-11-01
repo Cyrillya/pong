@@ -1,6 +1,7 @@
-import pygame
-import random
 import math
+import random
+
+import pygame
 
 # Constants
 board_height = 120
@@ -40,18 +41,22 @@ who_just_scored = None
 run_speed_multiplier = 1
 game_paused = True
 
+
 def _random_ball_velocity():
     angle_deg = random.choice([random.uniform(-30, 30), random.uniform(150, 210)])
     ang = math.radians(angle_deg)
     return pygame.Vector2(math.cos(ang), math.sin(ang)).normalize()
 
+
 ball_velocity = _random_ball_velocity()
+
 
 def draw_ball():
     color = "white"
     border_color = "gray"
     pygame.draw.circle(screen, border_color, (int(ball_center.x), int(ball_center.y)), ball_radius)
     pygame.draw.circle(screen, color, (int(ball_center.x), int(ball_center.y)), ball_radius - 3)
+
 
 def draw_board(center):
     line_width = 3
@@ -63,6 +68,7 @@ def draw_board(center):
     pygame.draw.line(screen, color, rect.bottomright, rect.bottomleft, line_width)
     pygame.draw.line(screen, color, rect.bottomleft, rect.topleft, line_width)
 
+
 def get_rect_from_center(center):
     return pygame.Rect(
         center.x - board_width // 2,
@@ -71,6 +77,7 @@ def get_rect_from_center(center):
         board_height
     )
 
+
 def draw():
     screen.fill("black")
     draw_entities()
@@ -78,10 +85,12 @@ def draw():
     draw_timer_bar()
     pygame.display.flip()
 
+
 def draw_entities():
     draw_board(left_board_center)
     draw_board(right_board_center)
     draw_ball()
+
 
 # 绘制比分
 def draw_score():
@@ -108,6 +117,7 @@ def draw_score():
     colon_width = colon.get_width()
     screen.blit(colon, (screen.get_width() // 2 - colon_width // 2, 17))
 
+
 def draw_timer_bar():
     if blink_timer > 0:
         bar_width = 200
@@ -118,11 +128,13 @@ def draw_timer_bar():
         pygame.draw.rect(screen, "gray", (x, y, bar_width, bar_height))
         pygame.draw.rect(screen, "white", (x, y, bar_width * percent, bar_height))
 
+
 def update_ball():
     global ball_center
     # 越来越快
     speed = ball_speed_init * run_speed_multiplier
     ball_center += ball_velocity * speed * dt
+
 
 # 重置球的位置和方向
 def reset_ball(direction=None):
@@ -136,10 +148,12 @@ def reset_ball(direction=None):
         ang = math.radians(random.uniform(-30, 30) if random.random() < 0.5 else random.uniform(150, 210))
     ball_velocity = pygame.Vector2(math.cos(ang), math.sin(ang)).normalize()
 
+
 def update_collide():
     global ball_center, ball_velocity, blink_timer, who_just_scored, left_score, right_score, run_speed_multiplier
 
-    ball_rect = pygame.Rect(int(ball_center.x - ball_radius), int(ball_center.y - ball_radius), ball_radius * 2, ball_radius * 2)
+    ball_rect = pygame.Rect(int(ball_center.x - ball_radius), int(ball_center.y - ball_radius), ball_radius * 2,
+                            ball_radius * 2)
 
     # paddle rects
     left_rect = get_rect_from_center(left_board_center)
@@ -185,6 +199,7 @@ def update_collide():
         run_speed_multiplier = 1
         win_sound.play()
 
+
 def update_control():
     keys = pygame.key.get_pressed()
     speed = board_speed
@@ -201,12 +216,14 @@ def update_control():
     left_board_center.y = max(half, min(screen.get_height() - half, left_board_center.y))
     right_board_center.y = max(half, min(screen.get_height() - half, right_board_center.y))
 
+
 def handle_exit(events):
     global game_paused
     for event in events:
         if event.type == pygame.QUIT:
             return True
     return False
+
 
 def handle_control_key(events):
     global game_paused
@@ -216,6 +233,7 @@ def handle_control_key(events):
                 game_paused = True
                 return
             game_paused = False
+
 
 def update_menu_and_draw():
     screen.fill("black")
@@ -236,6 +254,7 @@ def update_menu_and_draw():
 
     pygame.display.flip()
 
+
 def update():
     global blink_timer, game_paused
     if blink_timer > 0:
@@ -246,6 +265,7 @@ def update():
         update_control()
         update_ball()
         update_collide()
+
 
 while running:
     events = pygame.event.get()
