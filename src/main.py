@@ -22,17 +22,17 @@ running = True
 dt = 0
 
 # Resources
-start_sound = pygame.mixer.Sound('sfx/start.wav')
-collide_sound = pygame.mixer.Sound('sfx/collide.wav')
+start_sound = pygame.mixer.Sound('../sfx/start.wav')
+collide_sound = pygame.mixer.Sound('../sfx/collide.wav')
 collide_sound.set_volume(0.2)
-win_sound = pygame.mixer.Sound('sfx/win.wav')
+win_sound = pygame.mixer.Sound('../sfx/win.wav')
 
 # Global variables
 left_board_center = pygame.Vector2(int(window_size[0] * board_percent), screen.get_height() / 2)
 right_board_center = pygame.Vector2(int(window_size[0] * (1 - board_percent)), screen.get_height() / 2)
 ball_center = pygame.Vector2(screen.get_width() / 2, screen.get_height() / 2)
-score_font = pygame.font.Font("fonts/Azonix.otf", 60)
-font = pygame.font.Font("fonts/Azonix.otf", 24)
+score_font = pygame.font.Font("../fonts/Azonix.otf", 60)
+font = pygame.font.Font("../fonts/Azonix.otf", 24)
 left_score = 0
 right_score = 0
 blink_timer = 0
