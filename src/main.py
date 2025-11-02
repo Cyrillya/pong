@@ -37,7 +37,7 @@ blink_timer = 0
 who_just_scored = None
 game_paused = True
 bot_mode = True
-bot_random_move_point = None
+bot_difficulty = 1.0  # 0.0 - 1.0
 
 # Instances
 ball = Ball(screen)
@@ -125,19 +125,27 @@ def move_bot_to(center, y, max_distance = board_height / 3):
             center.y -= board_speed * dt
 
 def update_bot(self_center, opponent_center):
-    global bot_random_move_point
     simulation_dt = 1 * dt
     ball_towards_self = Helper.sign(self_center.x - opponent_center.x) == Helper.sign(ball.velocity.x)
+
+    # 难度系数决定球离自己多远才开始反应
+    if abs(self_center.x - ball.center.x) > screen.get_width() * Helper.lerp(0.2, 1, bot_difficulty):
+        return self_center
+
     # 球正在朝自己飞来，预判球落点并移动板子
     if ball_towards_self:
-        bot_random_move_point = None
         predicted_ball = ball.__copy__()
         while Helper.sign(predicted_ball.velocity.x) == Helper.sign(self_center.x - predicted_ball.center.x):
             predicted_ball.update(left_board_center, right_board_center, screen, simulation_dt)
-        move_bot_to(self_center, predicted_ball.center.y)
+        # 难度系数影响预判位置，越高则越接近预测落点
+        destination_y = Helper.lerp(ball.center.y, predicted_ball.center.y, bot_difficulty)
+        move_bot_to(self_center, destination_y)
 
-    # 球不在朝自己飞来，则随机移动到场地中心附近
+    # 球不在朝自己飞来
     else:
+        # 难度低则无弹前预判
+        if bot_difficulty < 0.6:
+            return self_center
         predicted_ball = ball.__copy__()
         while Helper.sign(predicted_ball.velocity.x) != Helper.sign(self_center.x - predicted_ball.center.x):
             predicted_board_y = predicted_ball.center.y
@@ -146,12 +154,10 @@ def update_bot(self_center, opponent_center):
             predicted_ball.update(pygame.Vector2(left_board_center.x, predicted_board_y), pygame.Vector2(right_board_center.x, predicted_board_y), screen, simulation_dt)
         while Helper.sign(predicted_ball.velocity.x) == Helper.sign(self_center.x - predicted_ball.center.x):
             predicted_ball.update(left_board_center, right_board_center, screen, simulation_dt)
-        move_bot_to(self_center, predicted_ball.center.y)
-        return self_center
-        if bot_random_move_point is None:
-            bot_random_move_point = screen.get_height() / 2 + random.randint(-100, 100)
-        else:
-            move_bot_to(self_center, bot_random_move_point, 10)
+        # 难度系数影响预判位置，越高则越接近预测落点
+        destination_y = Helper.lerp(ball.center.y, predicted_ball.center.y, bot_difficulty)
+        move_bot_to(self_center, destination_y)
+
     return self_center
 
 def update_control():
@@ -168,7 +174,7 @@ def update_control():
     
     if bot_mode:
         update_bot(right_board_center, left_board_center)
-        # update_bot(left_board_center, right_board_center)
+        update_bot(left_board_center, right_board_center)
 
     half = board_height / 2
     left_board_center.y = Helper.clamp(left_board_center.y, half, screen.get_height() - half)

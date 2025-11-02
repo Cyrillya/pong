@@ -56,6 +56,13 @@ class Helper:
         return False
 
     @staticmethod
+    def lerp_vector2(a: Vector2, b: Vector2, t: float) -> Vector2:
+        return Vector2(
+            Helper.lerp(a.x, b.x, t),
+            Helper.lerp(a.y, b.y, t)
+        )
+
+    @staticmethod
     def line_rect_collision(line_start, line_end, rect):
         # 转换为Vector2以便进行向量运算
         p1 = Vector2(line_start)
