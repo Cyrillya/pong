@@ -3,16 +3,18 @@ import random
 
 import pygame
 
+from src.Ball import Ball
+from src.Sound import Sound
+from src.Constants import Constants
+from src.Helper import Helper
+
 # Constants
-board_height = 120
-board_width = 10
-board_speed = 300
-board_percent = 0.18
-window_size = 840, 480
-fps_limit = 144
-ball_speed_init = 300
-ball_radius = 12
-speed_multiplier_max = 2.4
+board_height = Constants.board_height
+board_width = Constants.board_width
+board_speed = Constants.board_speed
+board_percent = Constants.board_percent
+window_size = Constants.window_size
+fps_limit = Constants.fps_limit
 
 # pygame setup
 pygame.display.set_caption("Pong Game")
@@ -22,61 +24,40 @@ clock = pygame.time.Clock()
 running = True
 dt = 0
 
-# Resources
-start_sound = pygame.mixer.Sound('../sfx/start.wav')
-collide_sound = pygame.mixer.Sound('../sfx/collide.wav')
-collide_sound.set_volume(0.2)
-win_sound = pygame.mixer.Sound('../sfx/win.wav')
-
 # Global variables
 left_board_center = pygame.Vector2(int(window_size[0] * board_percent), screen.get_height() / 2)
 right_board_center = pygame.Vector2(int(window_size[0] * (1 - board_percent)), screen.get_height() / 2)
-ball_center = pygame.Vector2(screen.get_width() / 2, screen.get_height() / 2)
+old_left_board_ys = [left_board_center.y]
+old_right_board_ys = [right_board_center.y]
 score_font = pygame.font.Font("../fonts/Azonix.otf", 60)
 font = pygame.font.Font("../fonts/Azonix.otf", 24)
 left_score = 0
 right_score = 0
 blink_timer = 0
 who_just_scored = None
-run_speed_multiplier = 1
 game_paused = True
+bot_mode = True
+bot_random_move_point = None
 
-
-def _random_ball_velocity():
-    angle_deg = random.choice([random.uniform(-30, 30), random.uniform(150, 210)])
-    ang = math.radians(angle_deg)
-    return pygame.Vector2(math.cos(ang), math.sin(ang)).normalize()
-
-
-ball_velocity = _random_ball_velocity()
-
+# Instances
+ball = Ball(screen)
 
 def draw_ball():
     color = "white"
     border_color = "gray"
-    pygame.draw.circle(screen, border_color, (int(ball_center.x), int(ball_center.y)), ball_radius)
-    pygame.draw.circle(screen, color, (int(ball_center.x), int(ball_center.y)), ball_radius - 3)
+    pygame.draw.circle(screen, border_color, (int(ball.center.x), int(ball.center.y)), Ball.radius)
+    pygame.draw.circle(screen, color, (int(ball.center.x), int(ball.center.y)), Ball.radius - 3)
 
 
 def draw_board(center):
     line_width = 3
     color = "gray"
-    rect = get_rect_from_center(center)
+    rect = Helper.get_board_rect(center)
     pygame.draw.rect(screen, "white", rect)
     pygame.draw.line(screen, color, rect.topleft, rect.topright, line_width)
     pygame.draw.line(screen, color, rect.topright, rect.bottomright, line_width)
     pygame.draw.line(screen, color, rect.bottomright, rect.bottomleft, line_width)
     pygame.draw.line(screen, color, rect.bottomleft, rect.topleft, line_width)
-
-
-def get_rect_from_center(center):
-    return pygame.Rect(
-        center.x - board_width // 2,
-        center.y - board_height // 2,
-        board_width,
-        board_height
-    )
-
 
 def draw():
     screen.fill("black")
@@ -129,76 +110,39 @@ def draw_timer_bar():
         pygame.draw.rect(screen, "white", (x, y, bar_width * percent, bar_height))
 
 
-def update_ball():
-    global ball_center
-    # 越来越快
-    speed = ball_speed_init * run_speed_multiplier
-    ball_center += ball_velocity * speed * dt
+def update_old_centers():
+    old_left_board_ys.append(left_board_center.copy().y)
+    old_right_board_ys.append(right_board_center.copy().y)
+    if len(old_left_board_ys) > 10:
+        old_left_board_ys.pop(0)
+    if len(old_right_board_ys) > 10:
+        old_right_board_ys.pop(0) 
 
+def move_bot_to(center, y):
+    if abs(center.y - y) > board_height / 3:
+        if center.y < y:
+            center.y += board_speed * dt
+        elif center.y > y:
+            center.y -= board_speed * dt
 
-# 重置球的位置和方向
-def reset_ball(direction=None):
-    global ball_center, ball_velocity
-    ball_center.update(screen.get_width() / 2, screen.get_height() / 2)
-    if direction == 'left':
-        ang = math.radians(random.uniform(150, 210))
-    elif direction == 'right':
-        ang = math.radians(random.uniform(-30, 30))
+def update_bot(self_center, opponent_center):
+    global bot_random_move_point
+    ball_towards_self = Helper.sign(self_center.x - opponent_center.x) == Helper.sign(ball.velocity.x)
+    # 球正在朝自己飞来，预判球落点并移动板子
+    if ball_towards_self:
+        bot_random_move_point = None
+        predicted_ball = ball.__copy__()
+        while predicted_ball.distance_x_to(self_center) > 30:
+            predicted_ball.update(left_board_center, right_board_center, screen, dt * 5)
+        move_bot_to(self_center, predicted_ball.center.y)
+
+    # 球不在朝自己飞来，则随机移动到场地中心附近
     else:
-        ang = math.radians(random.uniform(-30, 30) if random.random() < 0.5 else random.uniform(150, 210))
-    ball_velocity = pygame.Vector2(math.cos(ang), math.sin(ang)).normalize()
-
-
-def update_collide():
-    global ball_center, ball_velocity, blink_timer, who_just_scored, left_score, right_score, run_speed_multiplier
-
-    ball_rect = pygame.Rect(int(ball_center.x - ball_radius), int(ball_center.y - ball_radius), ball_radius * 2,
-                            ball_radius * 2)
-
-    # paddle rects
-    left_rect = get_rect_from_center(left_board_center)
-    right_rect = get_rect_from_center(right_board_center)
-
-    if ball_center.y - ball_radius <= 0:
-        ball_center.y = ball_radius
-        ball_velocity.y *= -1
-    elif ball_center.y + ball_radius >= screen.get_height():
-        ball_center.y = screen.get_height() - ball_radius
-        ball_velocity.y *= -1
-
-    if ball_rect.colliderect(left_rect):
-        ball_center.x = left_rect.right + ball_radius
-        ball_velocity.x *= -1
-        offset = (ball_center.y - left_board_center.y) / (board_height / 2)
-        ball_velocity.y += offset * 0.5
-        ball_velocity = ball_velocity.normalize()
-        run_speed_multiplier = min(run_speed_multiplier + 0.1, speed_multiplier_max)
-        collide_sound.play()
-    elif ball_rect.colliderect(right_rect):
-        ball_center.x = right_rect.left - ball_radius
-        ball_velocity.x *= -1
-        offset = (ball_center.y - right_board_center.y) / (board_height / 2)
-        ball_velocity.y += offset * 0.5
-        ball_velocity = ball_velocity.normalize()
-        run_speed_multiplier = min(run_speed_multiplier + 0.1, speed_multiplier_max)
-        collide_sound.play()
-
-    # 经过左右边界得分
-    if ball_center.x < -ball_radius * 2 - 50:
-        reset_ball(direction='right')
-        blink_timer = 1.5
-        who_just_scored = 'right'
-        right_score += 1
-        run_speed_multiplier = 1
-        win_sound.play()
-    elif ball_center.x > screen.get_width() + ball_radius * 2 + 50:
-        reset_ball(direction='left')
-        blink_timer = 1.5
-        who_just_scored = 'left'
-        left_score += 1
-        run_speed_multiplier = 1
-        win_sound.play()
-
+        if bot_random_move_point is None:
+            bot_random_move_point = screen.get_height() / 2 + random.randint(-100, 100)
+        else:
+            move_bot_to(self_center, bot_random_move_point)
+    return self_center
 
 def update_control():
     keys = pygame.key.get_pressed()
@@ -211,11 +155,31 @@ def update_control():
         right_board_center.y -= speed * dt
     if keys[pygame.K_DOWN]:
         right_board_center.y += speed * dt
+    
+    if bot_mode:
+        update_bot(right_board_center, left_board_center)
+        # update_bot(left_board_center, right_board_center)
 
     half = board_height / 2
-    left_board_center.y = max(half, min(screen.get_height() - half, left_board_center.y))
-    right_board_center.y = max(half, min(screen.get_height() - half, right_board_center.y))
+    left_board_center.y = Helper.clamp(left_board_center.y, half, screen.get_height() - half)
+    right_board_center.y = Helper.clamp(right_board_center.y, half, screen.get_height() - half)
 
+def check_ball_event():
+    global blink_timer, who_just_scored, left_score, right_score
+    events = ball.consume_event()
+    if events == "pass_left":
+        blink_timer = 1.5
+        who_just_scored = 'right'
+        right_score += 1
+        Sound.play_sound("win")
+    elif events == "pass_right":
+        blink_timer = 1.5
+        who_just_scored = 'left'
+        left_score += 1
+        Sound.play_sound("win")
+    elif events == "collide_board_left" or events == "collide_board_right":
+        Sound.play_sound("collide")
+        
 
 def handle_exit(events):
     global game_paused
@@ -226,9 +190,14 @@ def handle_exit(events):
 
 
 def handle_control_key(events):
-    global game_paused
+    global game_paused, bot_mode
     for event in events:
         if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_q:
+                if bot_mode:
+                    bot_mode = False
+                else:
+                    bot_mode = True
             if event.key == pygame.K_ESCAPE and game_paused is False:
                 game_paused = True
                 return
@@ -241,6 +210,7 @@ def update_menu_and_draw():
     text_lines = [
         "Use W/S to control left board",
         "Use Up/Down to control right board",
+        "Press Q to switch bot mode",
         "Press any key to start"
     ]
     text_surfaces = [font.render(line, True, pygame.Color("white")) for line in text_lines]
@@ -256,15 +226,15 @@ def update_menu_and_draw():
 
 
 def update():
-    global blink_timer, game_paused
+    global blink_timer, game_paused, who_just_scored, left_score, right_score
     if blink_timer > 0:
         blink_timer -= dt
         if blink_timer <= 0:
-            start_sound.play()
+            Sound.play_sound("start")
     else:
         update_control()
-        update_ball()
-        update_collide()
+        ball.update(left_board_center, right_board_center, screen, dt)
+        check_ball_event()
 
 
 while running:
