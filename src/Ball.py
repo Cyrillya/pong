@@ -10,13 +10,14 @@ from src.Sound import Sound
 
 class Ball:
     # Constants
-    run_speed_multiplier = 1
-    speed_multiplier_max = 3
-    speed_init = 300
-    radius = 12
+    speed_multiplier_min = Constants.ball_speed_multiplier_min
+    speed_multiplier_max = Constants.ball_speed_multiplier_max
+    speed_init = Constants.ball_speed_init
+    radius = Constants.ball_radius
     
     def __init__(self, screen):
         self.screen = screen
+        self.speed_multiplier = Ball.speed_multiplier_min
         self.center = pygame.Vector2(screen.get_width() / 2, screen.get_height() / 2)
         self.velocity = Ball._random_ball_velocity()
         self.event = None
@@ -25,7 +26,7 @@ class Ball:
         new_ball = Ball(self.screen)
         new_ball.center = self.center.copy()
         new_ball.velocity = self.velocity.copy()
-        new_ball.run_speed_multiplier = self.run_speed_multiplier
+        new_ball.speed_multiplier = self.speed_multiplier
         new_ball.event = self.event
         return new_ball
     
@@ -43,7 +44,7 @@ class Ball:
 
     def get_ball_speed(self, dt):
         # 越来越快
-        speed = Ball.speed_init * self.run_speed_multiplier
+        speed = Ball.speed_init * self.speed_multiplier
         return self.velocity * speed * dt
 
     @staticmethod
@@ -52,6 +53,7 @@ class Ball:
         velocity.x *= -1
         offset = (ball_y - board_y) / (Constants.board_height / 2)
         velocity.y += offset * 0.5
+        velocity.y = Helper.clamp(velocity.y, -1, 1)
         velocity = velocity.normalize()
         return velocity
     
@@ -81,12 +83,12 @@ class Ball:
         if ball_rect.colliderect(left_rect):
             self.center.x = left_rect.right + Ball.radius
             self.velocity = Ball.get_collide_velocity(self.velocity, left_board_center.y, self.center.y)
-            self.run_speed_multiplier = min(self.run_speed_multiplier + 0.1, Ball.speed_multiplier_max)
+            self.speed_multiplier = min(self.speed_multiplier + 0.2, Ball.speed_multiplier_max)
             self.event = "collide_board_left"
         elif ball_rect.colliderect(right_rect):
             self.center.x = right_rect.left - Ball.radius
             self.velocity = Ball.get_collide_velocity(self.velocity, right_board_center.y, self.center.y)
-            self.run_speed_multiplier = min(self.run_speed_multiplier + 0.1, Ball.speed_multiplier_max)
+            self.speed_multiplier = min(self.speed_multiplier + 0.2, Ball.speed_multiplier_max)
             self.event = "collide_board_right"
     
         # 经过左右边界得分
@@ -103,7 +105,7 @@ class Ball:
 
     # 重置球的位置和方向
     def reset(self, direction = None):
-        self.run_speed_multiplier = 1
+        self.speed_multiplier = Ball.speed_multiplier_min
         self.center.update(self.screen.get_width() / 2, self.screen.get_height() / 2)
         if direction == 'left':
             ang = math.radians(random.uniform(150, 210))

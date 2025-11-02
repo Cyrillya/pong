@@ -60,7 +60,6 @@ def draw_board(center):
     pygame.draw.line(screen, color, rect.bottomleft, rect.topleft, line_width)
 
 def draw():
-    screen.fill("black")
     draw_entities()
     draw_score()
     draw_timer_bar()
@@ -118,8 +117,8 @@ def update_old_centers():
     if len(old_right_board_ys) > 10:
         old_right_board_ys.pop(0) 
 
-def move_bot_to(center, y):
-    if abs(center.y - y) > board_height / 3:
+def move_bot_to(center, y, max_distance = board_height / 3):
+    if abs(center.y - y) > max_distance:
         if center.y < y:
             center.y += board_speed * dt
         elif center.y > y:
@@ -127,21 +126,32 @@ def move_bot_to(center, y):
 
 def update_bot(self_center, opponent_center):
     global bot_random_move_point
+    simulation_dt = 1 * dt
     ball_towards_self = Helper.sign(self_center.x - opponent_center.x) == Helper.sign(ball.velocity.x)
     # 球正在朝自己飞来，预判球落点并移动板子
     if ball_towards_self:
         bot_random_move_point = None
         predicted_ball = ball.__copy__()
-        while predicted_ball.distance_x_to(self_center) > 30:
-            predicted_ball.update(left_board_center, right_board_center, screen, dt * 5)
+        while Helper.sign(predicted_ball.velocity.x) == Helper.sign(self_center.x - predicted_ball.center.x):
+            predicted_ball.update(left_board_center, right_board_center, screen, simulation_dt)
         move_bot_to(self_center, predicted_ball.center.y)
 
     # 球不在朝自己飞来，则随机移动到场地中心附近
     else:
+        predicted_ball = ball.__copy__()
+        while Helper.sign(predicted_ball.velocity.x) != Helper.sign(self_center.x - predicted_ball.center.x):
+            predicted_board_y = predicted_ball.center.y
+            if Helper.line_rect_collision(predicted_ball.center, predicted_ball.center + predicted_ball.velocity * 1000, Helper.get_board_rect(opponent_center)):
+                predicted_board_y = opponent_center.y
+            predicted_ball.update(pygame.Vector2(left_board_center.x, predicted_board_y), pygame.Vector2(right_board_center.x, predicted_board_y), screen, simulation_dt)
+        while Helper.sign(predicted_ball.velocity.x) == Helper.sign(self_center.x - predicted_ball.center.x):
+            predicted_ball.update(left_board_center, right_board_center, screen, simulation_dt)
+        move_bot_to(self_center, predicted_ball.center.y)
+        return self_center
         if bot_random_move_point is None:
             bot_random_move_point = screen.get_height() / 2 + random.randint(-100, 100)
         else:
-            move_bot_to(self_center, bot_random_move_point)
+            move_bot_to(self_center, bot_random_move_point, 10)
     return self_center
 
 def update_control():
@@ -238,6 +248,7 @@ def update():
 
 
 while running:
+    screen.fill("black")
     events = pygame.event.get()
     running = handle_exit(events) is False
     handle_control_key(events)
