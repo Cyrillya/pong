@@ -42,6 +42,13 @@ bot_difficulty = 1.0  # 0.0 - 1.0
 # Instances
 ball = Ball(screen)
 
+def update_title():
+    pygame.display.set_caption("Pong Game")
+    if game_paused:
+        pygame.display.set_caption("Pong Game - Paused")
+    if bot_mode:
+        pygame.display.set_caption("Pong Game - Bot Mode (difficulty: {:0.1f})".format(bot_difficulty))
+
 def draw_ball():
     color = "white"
     border_color = "gray"
@@ -206,14 +213,18 @@ def handle_exit(events):
 
 
 def handle_control_key(events):
-    global game_paused, bot_mode
+    global game_paused, bot_mode, bot_difficulty
     for event in events:
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_q:
+            if event.key == pygame.K_x:
                 if bot_mode:
                     bot_mode = False
                 else:
                     bot_mode = True
+            if event.key == pygame.K_q:
+                bot_difficulty = max(bot_difficulty - 0.1, 0.0)
+            if event.key == pygame.K_e:
+                bot_difficulty = min(bot_difficulty + 0.1, 1.0)
             if event.key == pygame.K_ESCAPE and game_paused is False:
                 game_paused = True
                 return
@@ -226,7 +237,8 @@ def update_menu_and_draw():
     text_lines = [
         "Use W/S to control left board",
         "Use Up/Down to control right board",
-        "Press Q to switch bot mode",
+        "Press X to switch bot mode",
+        "Use Q/E to adjust bot difficulty",
         "Press any key to start"
     ]
     text_surfaces = [font.render(line, True, pygame.Color("white")) for line in text_lines]
@@ -258,6 +270,7 @@ while running:
     events = pygame.event.get()
     running = handle_exit(events) is False
     handle_control_key(events)
+    update_title()
     if game_paused:
         update_menu_and_draw()
     else:
