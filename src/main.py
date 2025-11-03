@@ -38,12 +38,13 @@ left_bot = False
 right_bot = True
 bot_difficulty_left = 1.0  # 0.0 - 1.0
 bot_difficulty_right = 1.0  # 0.0 - 1.0
+dt_count = 0
 
 # Instances
 ball = Ball(screen)
 
 def restart_game():
-    global left_score, right_score, ball, left_board_center, right_board_center, blink_timer, game_paused
+    global left_score, right_score, ball, left_board_center, right_board_center, blink_timer, game_paused, dt_count
     left_score = 0
     right_score = 0
     ball = Ball(screen)
@@ -51,6 +52,8 @@ def restart_game():
     right_board_center = pygame.Vector2(int(window_size[0] * (1 - board_percent)), screen.get_height() / 2)
     blink_timer = 0
     game_paused = True
+    dt_count = 0
+    print("--- Game Restarted ---")
 
 def update_title():
     pygame.display.set_caption("Pong Game")
@@ -150,14 +153,18 @@ def update_bot(self_center, opponent_center, difficulty):
     # 难度系数决定球离自己多远才开始反应
     if abs(self_center.x - ball.center.x) > screen.get_width() * Helper.lerp(0.2, 1, difficulty):
         return self_center
+    
+    # 难度影响预测位置和当前位置的混合比例
+    # 经过实测，0.75是最好的混合比例
+    mix_factor = Helper.lerp(0.0, 0.75, difficulty)
 
     # 球正在朝自己飞来，预判球落点并移动板子
     if ball_towards_self:
         predicted_ball = ball.__copy__()
         while Helper.sign(predicted_ball.velocity.x) == Helper.sign(self_center.x - predicted_ball.center.x):
             predicted_ball.update(left_board_center, right_board_center, screen, simulation_dt)
-        # 难度系数影响预判位置，越高则越接近预测落点
-        destination_y = Helper.lerp(ball.center.y, predicted_ball.center.y, difficulty)
+        # 混合比例影响预判位置，越高则越接近预测落点
+        destination_y = Helper.lerp(ball.center.y, predicted_ball.center.y, mix_factor)
         move_bot_to(self_center, destination_y)
 
     # 球不在朝自己飞来
@@ -166,15 +173,28 @@ def update_bot(self_center, opponent_center, difficulty):
         if difficulty < 0.6:
             return self_center
         predicted_ball = ball.__copy__()
+        # predicted_ball 正在朝对方飞去
         while Helper.sign(predicted_ball.velocity.x) != Helper.sign(self_center.x - predicted_ball.center.x):
+            # 预测与对方板子碰撞的位置
             predicted_board_y = predicted_ball.center.y
-            if Helper.line_rect_collision(predicted_ball.center, predicted_ball.center + predicted_ball.velocity * 1000, Helper.get_board_rect(opponent_center)):
-                predicted_board_y = opponent_center.y
+            # 如果快要和对方板子碰撞，则检测能不能和目前的板子位置碰撞
+            if predicted_ball.distance_x_to(opponent_center) < 60:
+                # 如果可以的话，就用当前对手板子位置
+                if Helper.line_rect_collision(predicted_ball.center, predicted_ball.center + predicted_ball.velocity * 1000, Helper.get_board_rect(opponent_center)):
+                    predicted_board_y = opponent_center.y
+                # 如果不能的话，就用对手板子上/下边缘和球碰撞
+                else:
+                    if predicted_ball.center.y < opponent_center.y:
+                        predicted_board_y = opponent_center.y - board_height / 2
+                    else:
+                        predicted_board_y = opponent_center.y + board_height / 2
+            # 更新球
             predicted_ball.update(pygame.Vector2(left_board_center.x, predicted_board_y), pygame.Vector2(right_board_center.x, predicted_board_y), screen, simulation_dt)
+        # predicted_ball 正在朝自己飞来
         while Helper.sign(predicted_ball.velocity.x) == Helper.sign(self_center.x - predicted_ball.center.x):
             predicted_ball.update(left_board_center, right_board_center, screen, simulation_dt)
-        # 难度系数影响预判位置，越高则越接近预测落点
-        destination_y = Helper.lerp(ball.center.y, predicted_ball.center.y, difficulty)
+        # 混合比例影响预判位置，越高则越接近预测落点
+        destination_y = Helper.lerp(ball.center.y, predicted_ball.center.y, mix_factor)
         move_bot_to(self_center, destination_y)
 
     return self_center
@@ -201,18 +221,23 @@ def update_control():
     right_board_center.y = Helper.clamp(right_board_center.y, half, screen.get_height() - half)
 
 def check_ball_event():
-    global blink_timer, who_just_scored, left_score, right_score
+    global blink_timer, who_just_scored, left_score, right_score, dt_count
+    dt_count += dt
     events = ball.consume_event()
     if events == "pass_left":
         blink_timer = 1.5
         who_just_scored = 'right'
         right_score += 1
         Sound.play_sound("win")
+        print("Right Score! {:0.1f} seconds passed. Now {} - {}".format(dt_count, left_score, right_score))
+        dt_count = 0
     elif events == "pass_right":
         blink_timer = 1.5
         who_just_scored = 'left'
         left_score += 1
         Sound.play_sound("win")
+        print("Left Score! {:0.1f} seconds passed. Now {} - {}".format(dt_count, left_score, right_score))
+        dt_count = 0
     elif events == "collide_board_left" or events == "collide_board_right":
         Sound.play_sound("collide")
         
@@ -273,7 +298,7 @@ def update_menu_and_draw():
 
 
 def update():
-    global blink_timer, game_paused, who_just_scored, left_score, right_score
+    global blink_timer, game_paused
     if blink_timer > 0:
         blink_timer -= dt
         if blink_timer <= 0:
