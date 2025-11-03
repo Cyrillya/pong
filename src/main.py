@@ -27,8 +27,6 @@ dt = 0
 # Global variables
 left_board_center = pygame.Vector2(int(window_size[0] * board_percent), screen.get_height() / 2)
 right_board_center = pygame.Vector2(int(window_size[0] * (1 - board_percent)), screen.get_height() / 2)
-old_left_board_ys = [left_board_center.y]
-old_right_board_ys = [right_board_center.y]
 score_font = pygame.font.Font("../fonts/Azonix.otf", 60)
 font = pygame.font.Font("../fonts/Azonix.otf", 24)
 left_score = 0
@@ -36,18 +34,30 @@ right_score = 0
 blink_timer = 0
 who_just_scored = None
 game_paused = True
-bot_mode = True
-bot_difficulty = 1.0  # 0.0 - 1.0
+left_bot = False
+right_bot = True
+bot_difficulty_left = 1.0  # 0.0 - 1.0
+bot_difficulty_right = 1.0  # 0.0 - 1.0
 
 # Instances
 ball = Ball(screen)
+
+def restart_game():
+    global left_score, right_score, ball, left_board_center, right_board_center, blink_timer, game_paused
+    left_score = 0
+    right_score = 0
+    ball = Ball(screen)
+    left_board_center = pygame.Vector2(int(window_size[0] * board_percent), screen.get_height() / 2)
+    right_board_center = pygame.Vector2(int(window_size[0] * (1 - board_percent)), screen.get_height() / 2)
+    blink_timer = 0
+    game_paused = True
 
 def update_title():
     pygame.display.set_caption("Pong Game")
     if game_paused:
         pygame.display.set_caption("Pong Game - Paused")
-    if bot_mode:
-        pygame.display.set_caption("Pong Game - Bot Mode (difficulty: {:0.1f})".format(bot_difficulty))
+    if left_bot or right_bot:
+        pygame.display.set_caption("Pong Game - Bot Mode)")
 
 def draw_ball():
     color = "white"
@@ -67,9 +77,11 @@ def draw_board(center):
     pygame.draw.line(screen, color, rect.bottomleft, rect.topleft, line_width)
 
 def draw():
+    screen.fill("black")
     draw_entities()
     draw_score()
     draw_timer_bar()
+    draw_bot_indicator()
     pygame.display.flip()
 
 
@@ -116,13 +128,13 @@ def draw_timer_bar():
         pygame.draw.rect(screen, "white", (x, y, bar_width * percent, bar_height))
 
 
-def update_old_centers():
-    old_left_board_ys.append(left_board_center.copy().y)
-    old_right_board_ys.append(right_board_center.copy().y)
-    if len(old_left_board_ys) > 10:
-        old_left_board_ys.pop(0)
-    if len(old_right_board_ys) > 10:
-        old_right_board_ys.pop(0) 
+def draw_bot_indicator():
+    if left_bot:
+        text = font.render("BOT {:0.1f}".format(bot_difficulty_left), True, pygame.Color("yellow"))
+        screen.blit(text, (20, 20))
+    if right_bot:
+        text = font.render("BOT {:0.1f}".format(bot_difficulty_right), True, pygame.Color("yellow"))
+        screen.blit(text, (screen.get_width() - text.get_width() - 20, 20))
 
 def move_bot_to(center, y, max_distance = board_height / 3):
     if abs(center.y - y) > max_distance:
@@ -131,12 +143,12 @@ def move_bot_to(center, y, max_distance = board_height / 3):
         elif center.y > y:
             center.y -= board_speed * dt
 
-def update_bot(self_center, opponent_center):
+def update_bot(self_center, opponent_center, difficulty):
     simulation_dt = 1 * dt
     ball_towards_self = Helper.sign(self_center.x - opponent_center.x) == Helper.sign(ball.velocity.x)
 
     # 难度系数决定球离自己多远才开始反应
-    if abs(self_center.x - ball.center.x) > screen.get_width() * Helper.lerp(0.2, 1, bot_difficulty):
+    if abs(self_center.x - ball.center.x) > screen.get_width() * Helper.lerp(0.2, 1, difficulty):
         return self_center
 
     # 球正在朝自己飞来，预判球落点并移动板子
@@ -145,13 +157,13 @@ def update_bot(self_center, opponent_center):
         while Helper.sign(predicted_ball.velocity.x) == Helper.sign(self_center.x - predicted_ball.center.x):
             predicted_ball.update(left_board_center, right_board_center, screen, simulation_dt)
         # 难度系数影响预判位置，越高则越接近预测落点
-        destination_y = Helper.lerp(ball.center.y, predicted_ball.center.y, bot_difficulty)
+        destination_y = Helper.lerp(ball.center.y, predicted_ball.center.y, difficulty)
         move_bot_to(self_center, destination_y)
 
     # 球不在朝自己飞来
     else:
         # 难度低则无弹前预判
-        if bot_difficulty < 0.6:
+        if difficulty < 0.6:
             return self_center
         predicted_ball = ball.__copy__()
         while Helper.sign(predicted_ball.velocity.x) != Helper.sign(self_center.x - predicted_ball.center.x):
@@ -162,7 +174,7 @@ def update_bot(self_center, opponent_center):
         while Helper.sign(predicted_ball.velocity.x) == Helper.sign(self_center.x - predicted_ball.center.x):
             predicted_ball.update(left_board_center, right_board_center, screen, simulation_dt)
         # 难度系数影响预判位置，越高则越接近预测落点
-        destination_y = Helper.lerp(ball.center.y, predicted_ball.center.y, bot_difficulty)
+        destination_y = Helper.lerp(ball.center.y, predicted_ball.center.y, difficulty)
         move_bot_to(self_center, destination_y)
 
     return self_center
@@ -179,9 +191,10 @@ def update_control():
     if keys[pygame.K_DOWN]:
         right_board_center.y += speed * dt
     
-    if bot_mode:
-        update_bot(right_board_center, left_board_center)
-        update_bot(left_board_center, right_board_center)
+    if right_bot:
+        update_bot(right_board_center, left_board_center, bot_difficulty_right)
+    if left_bot:
+        update_bot(left_board_center, right_board_center, bot_difficulty_left)
 
     half = board_height / 2
     left_board_center.y = Helper.clamp(left_board_center.y, half, screen.get_height() - half)
@@ -213,22 +226,27 @@ def handle_exit(events):
 
 
 def handle_control_key(events):
-    global game_paused, bot_mode, bot_difficulty
+    global game_paused, bot_difficulty_left, bot_difficulty_right, left_bot, right_bot
     for event in events:
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_x:
-                if bot_mode:
-                    bot_mode = False
-                else:
-                    bot_mode = True
+            if event.key == pygame.K_z: 
+                left_bot = not left_bot
+            if event.key == pygame.K_c:
+                right_bot = not right_bot
             if event.key == pygame.K_q:
-                bot_difficulty = max(bot_difficulty - 0.1, 0.0)
+                bot_difficulty_left += 0.1
+                if bot_difficulty_left > 1.0:
+                    bot_difficulty_left = 0.0
             if event.key == pygame.K_e:
-                bot_difficulty = min(bot_difficulty + 0.1, 1.0)
-            if event.key == pygame.K_ESCAPE and game_paused is False:
-                game_paused = True
-                return
-            game_paused = False
+                bot_difficulty_right += 0.1
+                if bot_difficulty_right > 1.0:
+                    bot_difficulty_right = 0.0
+            if event.key == pygame.K_r:
+                restart_game()
+            if event.key == pygame.K_ESCAPE:
+                game_paused = not game_paused
+            if event.key == pygame.K_SPACE and game_paused is True:
+                game_paused = False
 
 
 def update_menu_and_draw():
@@ -237,9 +255,10 @@ def update_menu_and_draw():
     text_lines = [
         "Use W/S to control left board",
         "Use Up/Down to control right board",
-        "Press X to switch bot mode",
+        "Use Z/C to toggle bot for left/right board",
         "Use Q/E to adjust bot difficulty",
-        "Press any key to start"
+        "Use R to restart game",
+        "Press space to start"
     ]
     text_surfaces = [font.render(line, True, pygame.Color("white")) for line in text_lines]
     height = sum(surface.get_height() for surface in text_surfaces) + 15
@@ -266,7 +285,6 @@ def update():
 
 
 while running:
-    screen.fill("black")
     events = pygame.event.get()
     running = handle_exit(events) is False
     handle_control_key(events)
