@@ -32,6 +32,7 @@ font = pygame.font.Font("../fonts/Azonix.otf", 24)
 left_score = 0
 right_score = 0
 blink_timer = 0
+start_direction = None
 who_just_scored = None
 game_paused = True
 left_bot = False
@@ -56,17 +57,15 @@ def restart_game():
     print("--- Game Restarted ---")
 
 def update_title():
-    pygame.display.set_caption("Pong Game")
+    text = "Pong Game"
     if game_paused:
-        pygame.display.set_caption("Pong Game - Paused")
+        text += " - Paused"
     if left_bot or right_bot:
-        pygame.display.set_caption("Pong Game - Bot Mode)")
+        text += " - Bot Mode"
+    
+    text += " - {} FPS".format(int(clock.get_fps()))
 
-def draw_ball():
-    color = "white"
-    border_color = "gray"
-    pygame.draw.circle(screen, border_color, (int(ball.center.x), int(ball.center.y)), Ball.radius)
-    pygame.draw.circle(screen, color, (int(ball.center.x), int(ball.center.y)), Ball.radius - 3)
+    pygame.display.set_caption(text)
 
 
 def draw_board(center):
@@ -89,9 +88,9 @@ def draw():
 
 
 def draw_entities():
+    ball.draw()
     draw_board(left_board_center)
     draw_board(right_board_center)
-    draw_ball()
 
 
 # 绘制比分
@@ -147,7 +146,7 @@ def move_bot_to(center, y, max_distance = board_height / 3):
             center.y -= board_speed * dt
 
 def update_bot(self_center, opponent_center, difficulty):
-    simulation_dt = 1 * dt
+    max_steps = 1000
     ball_towards_self = Helper.sign(self_center.x - opponent_center.x) == Helper.sign(ball.velocity.x)
 
     # 难度系数决定球离自己多远才开始反应
@@ -160,9 +159,14 @@ def update_bot(self_center, opponent_center, difficulty):
 
     # 球正在朝自己飞来，预判球落点并移动板子
     if ball_towards_self:
+        simulation_dt = 2 * dt
         predicted_ball = ball.__copy__()
-        while Helper.sign(predicted_ball.velocity.x) == Helper.sign(self_center.x - predicted_ball.center.x):
+        predicted_ball.simulation = True
+        while Helper.sign(predicted_ball.velocity.x) == Helper.sign(self_center.x - predicted_ball.center.x) and max_steps > 0:
             predicted_ball.update(left_board_center, right_board_center, screen, simulation_dt)
+            max_steps -= 1
+            if predicted_ball.passed:
+                break
         # 混合比例影响预判位置，越高则越接近预测落点
         destination_y = Helper.lerp(ball.center.y, predicted_ball.center.y, mix_factor)
         move_bot_to(self_center, destination_y)
@@ -173,8 +177,10 @@ def update_bot(self_center, opponent_center, difficulty):
         if difficulty < 0.6:
             return self_center
         predicted_ball = ball.__copy__()
+        predicted_ball.simulation = True
+        simulation_dt = 4 * dt
         # predicted_ball 正在朝对方飞去
-        while Helper.sign(predicted_ball.velocity.x) != Helper.sign(self_center.x - predicted_ball.center.x):
+        while Helper.sign(predicted_ball.velocity.x) != Helper.sign(self_center.x - predicted_ball.center.x) and max_steps > 0:
             # 预测与对方板子碰撞的位置
             predicted_board_y = predicted_ball.center.y
             # 如果快要和对方板子碰撞，则检测能不能和目前的板子位置碰撞
@@ -190,9 +196,15 @@ def update_bot(self_center, opponent_center, difficulty):
                         predicted_board_y = opponent_center.y + board_height / 2
             # 更新球
             predicted_ball.update(pygame.Vector2(left_board_center.x, predicted_board_y), pygame.Vector2(right_board_center.x, predicted_board_y), screen, simulation_dt)
+            max_steps -= 1
+            if predicted_ball.passed:
+                break
         # predicted_ball 正在朝自己飞来
-        while Helper.sign(predicted_ball.velocity.x) == Helper.sign(self_center.x - predicted_ball.center.x):
+        while Helper.sign(predicted_ball.velocity.x) == Helper.sign(self_center.x - predicted_ball.center.x) and max_steps > 0:
             predicted_ball.update(left_board_center, right_board_center, screen, simulation_dt)
+            max_steps -= 1
+            if predicted_ball.passed:
+                break
         # 混合比例影响预判位置，越高则越接近预测落点
         destination_y = Helper.lerp(ball.center.y, predicted_ball.center.y, mix_factor)
         move_bot_to(self_center, destination_y)
@@ -221,7 +233,7 @@ def update_control():
     right_board_center.y = Helper.clamp(right_board_center.y, half, screen.get_height() - half)
 
 def check_ball_event():
-    global blink_timer, who_just_scored, left_score, right_score, dt_count
+    global blink_timer, who_just_scored, left_score, right_score, dt_count, start_direction
     dt_count += dt
     events = ball.consume_event()
     if events == "pass_left":
@@ -231,6 +243,7 @@ def check_ball_event():
         Sound.play_sound("win")
         print("Right Score! {:0.1f} seconds passed. Now {} - {}".format(dt_count, left_score, right_score))
         dt_count = 0
+        start_direction = 'left'
     elif events == "pass_right":
         blink_timer = 1.5
         who_just_scored = 'left'
@@ -238,6 +251,7 @@ def check_ball_event():
         Sound.play_sound("win")
         print("Left Score! {:0.1f} seconds passed. Now {} - {}".format(dt_count, left_score, right_score))
         dt_count = 0
+        start_direction = 'right'
     elif events == "collide_board_left" or events == "collide_board_right":
         Sound.play_sound("collide")
         
@@ -303,10 +317,11 @@ def update():
         blink_timer -= dt
         if blink_timer <= 0:
             Sound.play_sound("start")
-    else:
-        update_control()
-        ball.update(left_board_center, right_board_center, screen, dt)
-        check_ball_event()
+            ball.reset(start_direction)
+
+    update_control()
+    ball.update(left_board_center, right_board_center, screen, dt)
+    check_ball_event()
 
 
 while running:

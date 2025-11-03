@@ -14,13 +14,17 @@ class Ball:
     speed_multiplier_max = Constants.ball_speed_multiplier_max
     speed_init = Constants.ball_speed_init
     radius = Constants.ball_radius
+    trail_dt = 0.3
     
     def __init__(self, screen):
         self.screen = screen
         self.speed_multiplier = Ball.speed_multiplier_min
         self.center = pygame.Vector2(screen.get_width() / 2, screen.get_height() / 2)
+        self.old_centers = []
         self.velocity = Ball._random_ball_velocity()
         self.event = None
+        self.passed = False
+        self.simulation = False
         
     def __copy__(self):
         new_ball = Ball(self.screen)
@@ -67,7 +71,11 @@ class Ball:
     
         # paddle rects
         left_rect = Helper.get_board_rect(left_board_center)
+        left_rect.inflate(6, 0)
+        left_rect.x -= 6
         right_rect = Helper.get_board_rect(right_board_center)
+        right_rect.inflate(6, 0)
+        right_rect.x += 6
     
         # 碰上墙
         if self.center.y - Ball.radius <= 0:
@@ -83,25 +91,49 @@ class Ball:
         if ball_rect.colliderect(left_rect):
             self.center.x = left_rect.right + Ball.radius
             self.velocity = Ball.get_collide_velocity(self.velocity, left_board_center.y, self.center.y)
-            self.speed_multiplier = min(self.speed_multiplier + 0.2, Ball.speed_multiplier_max)
+            self.speed_multiplier = min(self.speed_multiplier + 0.1, Ball.speed_multiplier_max)
             self.event = "collide_board_left"
         elif ball_rect.colliderect(right_rect):
             self.center.x = right_rect.left - Ball.radius
             self.velocity = Ball.get_collide_velocity(self.velocity, right_board_center.y, self.center.y)
-            self.speed_multiplier = min(self.speed_multiplier + 0.2, Ball.speed_multiplier_max)
+            self.speed_multiplier = min(self.speed_multiplier + 0.1, Ball.speed_multiplier_max)
             self.event = "collide_board_right"
     
         # 经过左右边界得分
-        if self.center.x < -Ball.radius * 2 - 50:
-            self.reset(direction='right')
-            self.event = "pass_left"
-        elif self.center.x > screen.get_width() + Ball.radius * 2 + 50:
-            self.reset(direction='left')
-            self.event = "pass_right"
+        if not self.passed:
+            if self.center.x < -Ball.radius * 2 - 50:
+                self.passed = True
+                self.event = "pass_left"
+            elif self.center.x > screen.get_width() + Ball.radius * 2 + 50:
+                self.passed = True
+                self.event = "pass_right"
+    
+    def update_old_centers(self):
+        self.old_centers.append(self.center.copy())
+        if len(self.old_centers) > Constants.fps_limit * Ball.trail_dt / self.speed_multiplier:
+            self.old_centers.pop(0)
 
     def update(self, left_board_center, right_board_center, screen, dt):
         self.center += self.get_ball_speed(dt)
         self.update_collide(left_board_center, right_board_center, screen)
+        if not self.simulation:
+            self.update_old_centers()
+    
+    def draw(self):
+        color = "white"
+        border_color = "gray"
+        self.draw_trail()
+        pygame.draw.circle(self.screen, border_color, (int(self.center.x), int(self.center.y)), Ball.radius)
+        pygame.draw.circle(self.screen, color, (int(self.center.x), int(self.center.y)), Ball.radius - 3)
+    
+    def draw_trail(self):
+        n = len(self.old_centers)
+        for i in range(n - 1):
+            t = i / n
+            color = (int(200 * t), int(200 * t), int(200 * t), int(200 * t))
+            pos_start = self.old_centers[i]
+            pos_end = self.old_centers[i + 1]
+            pygame.draw.line(self.screen, color, pos_start, pos_end, int(Ball.radius / 2 + t * 6))
 
     # 重置球的位置和方向
     def reset(self, direction = None):
@@ -114,4 +146,6 @@ class Ball:
         else:
             ang = math.radians(random.uniform(-30, 30) if random.random() < 0.5 else random.uniform(150, 210))
         self.velocity = pygame.Vector2(math.cos(ang), math.sin(ang)).normalize()
+        self.passed = False
+        self.old_centers = []
         
